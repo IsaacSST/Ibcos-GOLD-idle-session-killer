@@ -1,42 +1,83 @@
 import telnetlib
 import time
 import sys
+import math as m
 
 args = sys.argv
 thresh = False
 auto = False
+exclude = False
+max_sessions = 120
+dynamic_thresh = False
 
 for arg in args:
-    if 'auto' in arg:
+    if '-auto' in arg:
         auto = True
-        interval = int(arg[5:])
+        interval = int(arg[6:])
 
-    if 'th' in arg:
+    if '-th' in arg:
         thresh = True
-        time_thresh = int(arg[3:])
+        time_thresh = int(arg[4:])
+
+    if '-x' in arg:
+        exclude = True
+        exclude_str = arg[3:]
+
+    if '-max' in arg:
+        max_sessions = int(arg[5:])
+        dynamic_thresh = True
+
 
 loop = True
 while loop:
     # connection
     HOST = '' #write host ip here
-    USER = 'root' #write login name here
+    USER = '' #write login name here
     PASS = '' #write password here
-    tn = telnetlib.Telnet(HOST, 23)
-    print("connected")
+    connected = False
+    while not connected:
+        try:
+            tn = telnetlib.Telnet(HOST, 23)
+            print("connected")
+            connected = True
+        except:
+            print('unable to connect to host')
+            print('retrying...')
+            time.sleep(2)
+
 
     # login
-    tn.read_until(b'login: ')
-    tn.write((USER + '\n').encode('ascii'))
-    print("written login")
+    try:
+        tn.read_until(b'login: ')
+        tn.write((USER + '\n').encode('ascii'))
+        print("written login")
 
-    tn.read_until(b'assword: ')
-    tn.write((PASS + '\n').encode('ascii'))
-    print("written password")
+        tn.read_until(b'assword: ')
+        tn.write((PASS + '\n').encode('ascii'))
+        print("written password")
 
-    # setting terminal type
-    tn.read_until(b'erminal type? ')
-    tn.write(b'vt100\n')
-    print("terminal type written")
+        # setting terminal type
+        tn.read_until(b'erminal type? ')
+        tn.write(b'vt100\n')
+        print("terminal type written")
+    except:
+        print('Unable to execute login sequence')
+        print('Retrying...')
+        tn.read_all()
+        tn.close()
+        time.sleep(2)
+        next
+
+    if dynamic_thresh:
+        tn.read_until(b'# ')
+        tn.write(b"show | grep 'Users = ' | cat\n")
+        out = tn.read_until(b':~').decode()
+        users = int(out.split('\r\n')[1].split('Users = ')[1].split()[0])
+        factor = (m.exp(max(0.0, (users - 0.8*0.96*max_sessions) / (0.2*0.96*max_sessions))) - 1) / (m.e - 1)
+        time_thresh = 60 - int(factor*20.0)
+        thresh = True
+        print(str(users) + ' of ' + str(max_sessions) + ', setting threshold: ' + str(time_thresh) + ' mins')
+
 
     # w command
     tn.read_until(b'# ')
@@ -66,6 +107,19 @@ while loop:
 
     print('hit list compiled')
 
+    #getting list of pids to exclude (e.g tills, specific people, DPs) if wanting to avoid killing them
+    if exclude:
+        ex_pids = []
+        tn.read_until(b'# ')
+        show_command = 'show | grep -E -i "' + exclude_str + '"\n'
+        tn.write(show_command.encode('ascii'))
+        out = tn.read_until(b':~').decode()
+        sessions = out.split('\r\n')[1:-1]
+        for s in sessions:
+            pid = s.split()[-1]
+            ex_pids.append(pid)
+        
+
     # getting pids and killing
     if len(hitlist) > 0:
         for hit in hitlist:
@@ -74,7 +128,9 @@ while loop:
             tn.write(get_pid_command.encode('ascii'))
             out = tn.read_until(b':~').decode()
             pid = out.split('\n')[2].split()[0]
-
+            if exclude:
+                if pid in ex_pids:
+                    continue
             tn.read_until(b'# ')
             kill_command = 'kill -9 ' + pid + '\n'
             tn.write(kill_command.encode('ascii'))
