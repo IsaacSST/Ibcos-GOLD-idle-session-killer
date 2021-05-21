@@ -2,6 +2,7 @@ import telnetlib
 import time
 import sys
 import math as m
+from getpass import getpass
 
 args = sys.argv
 thresh = False
@@ -9,8 +10,12 @@ auto = False
 exclude = False
 max_sessions = 120
 dynamic_thresh = False
+host = 'localhost'
 
 for arg in args:
+    if '-host' in arg:
+        host = arg[6:]
+
     if '-auto' in arg:
         auto = True
         interval = int(arg[6:])
@@ -27,17 +32,24 @@ for arg in args:
         max_sessions = int(arg[5:])
         dynamic_thresh = True
 
+username = input("Username: ")
+password = getpass()
 
 loop = True
 while loop:
     # connection
-    HOST = '' #write host ip here
-    USER = '' #write login name here
-    PASS = '' #write password here
+    HOST = host #write host ip here
+    PORT = 23
+    if ':' in HOST:
+        PORT = int(HOST.split(':')[1])
+        HOST = HOST.split(':')[0]
+
+    USER = username #write login name here
+    PASS = password #write password here
     connected = False
     while not connected:
         try:
-            tn = telnetlib.Telnet(HOST, 23)
+            tn = telnetlib.Telnet(HOST, PORT)
             print("connected")
             connected = True
         except:
@@ -80,10 +92,18 @@ while loop:
 
 
     # w command
-    tn.read_until(b'# ')
-    tn.write(b'w\n')
-    print("w command gone through")
-    time.sleep(1)
+    try:
+        tn.read_until(b'# ')
+        tn.write(b'w\n')
+        print("w command gone through")
+        time.sleep(1)
+    except:
+        print("w command failed")
+        print('Retrying...')
+        tn.read_all()
+        tn.close()
+        time.sleep(2)
+        next
 
     # reading sessions into string
     out = tn.read_until(b':~').decode()
@@ -118,7 +138,7 @@ while loop:
         for s in sessions:
             pid = s.split()[-1]
             ex_pids.append(pid)
-        
+
 
     # getting pids and killing
     if len(hitlist) > 0:
