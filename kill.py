@@ -4,7 +4,9 @@ import sys
 import math as m
 from getpass import getpass
 
+#getting arguments from command line
 args = sys.argv
+#setting defaults
 thresh = False
 auto = False
 exclude = False
@@ -12,6 +14,7 @@ max_sessions = 120
 dynamic_thresh = False
 host = 'localhost'
 
+#reading arguments into variables
 for arg in args:
     if '-host' in arg:
         host = arg[6:]
@@ -32,20 +35,24 @@ for arg in args:
         max_sessions = int(arg[5:])
         dynamic_thresh = True
 
+#getting login details
 username = input("Username: ")
 password = getpass()
 
 loop = True
 while loop:
     # connection
-    HOST = host #write host ip here
+    HOST = host
     PORT = 23
+    #getting port if port is specified in IP
     if ':' in HOST:
         PORT = int(HOST.split(':')[1])
         HOST = HOST.split(':')[0]
 
-    USER = username #write login name here
-    PASS = password #write password here
+    USER = username
+    PASS = password
+
+    #attempting to connect to server
     connected = False
     while not connected:
         try:
@@ -80,6 +87,7 @@ while loop:
         time.sleep(2)
         next
 
+    #setting dynamic threshold if max sessions specified
     if dynamic_thresh:
         tn.read_until(b'# ')
         tn.write(b"show | grep 'Users = ' | cat\n")
@@ -110,7 +118,10 @@ while loop:
     sessions = out.split('\r\n')[3:-1]
     sessions = list(map(lambda x: x.split(), sessions))
 
+    #initialising hitlist of sessions that will be killed
     hitlist = []
+
+    #list of days of week - if a session has any of these in its show line then it will be killed as it means it has been logged in for more than a day, and might be a ghost session
     week = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun']
 
     # finding sessions to kill
@@ -147,19 +158,22 @@ while loop:
             tn.read_until(b'# ')
             tn.write(get_pid_command.encode('ascii'))
             out = tn.read_until(b':~').decode()
-            pid = out.split('\n')[2].split()[0]
-            if exclude:
-                if pid in ex_pids:
-                    continue
-            tn.read_until(b'# ')
-            kill_command = 'kill -9 ' + pid + '\n'
-            tn.write(kill_command.encode('ascii'))
-            print(hit + ' killed')
+            try:
+                pid = out.split('\n')[2].split()[0]
+                if exclude:
+                    if pid in ex_pids:
+                        continue
+                tn.read_until(b'# ')
+                kill_command = 'kill -9 ' + pid + '\n'
+                tn.write(kill_command.encode('ascii'))
+                print(hit + ' killed')
+            except:
+                print("Unable to kill " + hit)
 
     else:
         print('No eligible sessions')
 
-    # terminating session
+    # terminating connection
     tn.read_until(b'# ')
     tn.write(b'exit\n')
     tn.close()
