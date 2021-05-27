@@ -1,3 +1,8 @@
+######################################################################################
+# python 3 script for killing user sessions of Ibcos gold classic
+# author: Isaac Thompson 20/03/2021 - 26/05/2021, Lloyd Ltd
+
+######################################################################################
 import telnetlib
 import time
 import sys
@@ -128,7 +133,7 @@ while loop:
     for session in sessions:
         if ('m' in session[3]) and (session[7] == 'dbr'):
             hitlist.append(session[1])
-        elif any(day in session[2] for day in week) and (session[1] != 'console'):
+        elif any(day in session[2] for day in week) and (session[1] != 'console') and (session[0] != 'root'):
             hitlist.append(session[1])
         elif thresh:
             if ('s' not in session[3]) and (session[7] == 'dbr'):
